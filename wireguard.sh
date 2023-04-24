@@ -253,6 +253,9 @@ addClient()
 	# save currently running wireguard configuration
 	wg-quick save "${sIface}"
 
+	# get client AS number from input
+	cASN=${cASN#*bgp=}
+
 	# save client information to DB
 	echo -e "${cName}\t${cPriv}\t${cPub}\t$(<"${cPsk}")\t${cIP}\t${cASN:=0}" \
 		>> "${sDB}"
@@ -260,7 +263,6 @@ addClient()
 	# generate the client configuration files and commands
 	makeConf
 	
-	cASN=${cASN#*bgp=}
 	addBGP
 }
 
