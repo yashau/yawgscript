@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-############################ WireGuard Script by Yashau v2.0 ############################
+############################ WireGuard Script by Yashau v2.1 ############################
 
 ######################################### README ########################################
 ##--This script assumes that the WireGuard server configuration lives in---------------##
