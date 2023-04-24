@@ -40,7 +40,8 @@
 ##------./wireguard.sh conf alice------------------------------------------------------##
 ##-------------------------------------------------------------------------------------##
 ##--4) reload - flushes all client information from the wireguard config---------------##
-##------and reloads all client from the DB---------------------------------------------##
+##------and reloads all client from the DB. For BGP peers, it will also reconfigure----##
+##------all BGP neighbors in FRRouting.------------------------------------------------##
 ##-------------------------------------------------------------------------------------##
 ##------./wireguard.sh reload----------------------------------------------------------##
 ##-------------------------------------------------------------------------------------##
@@ -162,23 +163,27 @@ makeConf()
 addBGP()
 {
 	# add the client bgp neighbor on the server
-	vtysh -c "configure terminal" \
-		-c "ip prefix-list no-default-route seq 5 permit 0.0.0.0/0 ge 1" \
-		-c "router bgp ${sASN}" \
-		-c "neighbor ${cIP%%,*} remote-as ${cASN}" \
-		-c "address-family ipv4 unicast" \
-		-c "neighbor ${cIP%%,*} prefix-list no-default-route in" \
-		-c "neighbor ${cIP%%,*} prefix-list no-default-route out" \
-		-c "do write memory"
+	if grep -q "${cASN}" <<< "$(vtysh -c 'show ip bgp summary')"; then
+		vtysh -c "configure terminal" \
+			-c "ip prefix-list no-default-route seq 5 permit 0.0.0.0/0 ge 1" \
+			-c "router bgp ${sASN}" \
+			-c "neighbor ${cIP%%,*} remote-as ${cASN}" \
+			-c "address-family ipv4 unicast" \
+			-c "neighbor ${cIP%%,*} prefix-list no-default-route in" \
+			-c "neighbor ${cIP%%,*} prefix-list no-default-route out" \
+			-c "do write memory"
+	fi
 }
 
 removeBGP()
 {
 	# remove the client bgp neighbor on the server
-	vtysh -c "configure terminal" \
-		-c "router bgp ${sASN}" \
-		-c "no neighbor ${cIP%%,*} remote-as ${cASN}" \
-		-c "do write memory"
+	if grep -q "${cASN}" <<< "$(vtysh -c 'show ip bgp summary')"; then
+		vtysh -c "configure terminal" \
+			-c "router bgp ${sASN}" \
+			-c "no neighbor ${cIP%%,*} remote-as ${cASN}" \
+			-c "do write memory"
+	fi
 }
 
 addClient()
@@ -194,22 +199,9 @@ addClient()
 
 	# making sure frr is running and that the supplied client ASN does not exist
 	if [[ "${autoBGP}" -eq 1 ]]; then
-		if [[ ! -z "${cASN}" ]]; then
+		if [[ -n "${cASN}" ]]; then
 			if systemctl status frr.service > /dev/null 2>&1; then
-				if grep -q "${cASN}" <<< "$(vtysh -c 'show ip bgp summary')"; then
-					# exit if client ASN already exists in the FRR neighbor list
-					echo "Client ASN already exists in FRR. Terminating."
-					exit 1
-				else
-					# set to configure frrouting on the server
-					configFRR=1
-				fi
-				# set to generate vtysh command for client side bgp configuration
-				cBGPConf=1
-			else
-				# exit if frrouting service is unavailable
-				echo "FRRouting service unavailable. Terminating."
-				exit 1
+				configFRR=1
 			fi
 		fi
 	fi
@@ -270,7 +262,7 @@ removeClient()
 	[[ "${autoBGP}" -eq 1 ]] && [[ "${cASN}" -ne 0 ]] && removeBGP || true
 	
 	# delete config files from configs directory
-	find ${cConfs} -name "${cName}.*" -delete
+	find "${cConfs}" -name "${cName}.*" -delete
 }
 
 reloadConf()
@@ -289,6 +281,7 @@ reloadConf()
 		wg set "${sIface}" peer "${cPub}" allowed-ips "${cIP}" \
 			preshared-key "${cPsk}"
 		cASN=$(awk '{print $6}' <<< "${line}")
+		[[ "${autoBGP}" -eq 1 ]] && [[ "${cASN}" -ne 0 ]] && addBGP || true
 	done < "${sDB}"
 
 	# save currently running wireguard configuration

@@ -41,7 +41,8 @@ regenerated.
 	```./wireguard.sh conf alice```
 
 4) reload - flushes all client information from the wireguard config
-and reloads all client from the DB
+and reloads all client from the DB.For BGP peers, it will also reconfigure
+all BGP neighbors in FRRouting
 
 	```./wireguard.sh reload```
 
