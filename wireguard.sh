@@ -94,7 +94,11 @@ getVars()
 	cPsk="$(mktemp /tmp/psk-XXXXX)" && trap 'rm "${cPsk}"' EXIT
 	echo "${_cPsk}" > "${cPsk}"
 
-	[[ "${autoBGP}" -eq 1 ]] && [[ "${cASN}" -ne 0 ]] && cBGPConf=1
+	if [[ "${autoBGP}" -eq 1 ]]; then
+		if [[ "${cASN}" -ne 0 ]]; then
+			cBGPConf=1
+		fi
+	fi
 }
 
 makeConf()
