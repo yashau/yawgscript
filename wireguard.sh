@@ -53,8 +53,8 @@
 read -r cmd cName cIP cASN <<< "${1} ${2} ${3} ${4}"
 
 # read variables from env file
-mapfile -t env <<< "$(grep -v '^#' .env)"
-IFS=$'\n' read -r -d '' genQR autoBGP sIface sHost cRoutes cDNS cConfs sConf sDB \
+mapfile -t env <<< "$(grep -v '^\s*$\|^\s*\#' .env)"
+IFS=$'\n' read -r -d '' genQR autoBGP dynamicBGP sIface sHost cRoutes cDNS cConfs sConf sDB \
 	<<< "$(printf '%s\n' "${env[@]#*=}")"
 
 set -e
@@ -83,7 +83,7 @@ getVars()
 	fi
 
 	# get client params from the DB
-	line=$(grep -P "${cName}\t" "${sDB}" || true)
+	line=$(grep -P "${cName}\t" "${sDB}")
 	if [[ -z "${line}" ]]; then
 		# exit if client name doesn't exist in the DB
 		echo "Client not found in DB. Terminating."
@@ -94,7 +94,7 @@ getVars()
 	cPsk="$(mktemp /tmp/psk-XXXXX)" && trap 'rm "${cPsk}"' EXIT
 	echo "${_cPsk}" > "${cPsk}"
 
-	[[ "${autoBGP}" -eq 1 ]] && [[ "${cASN}" -ne 0 ]] && cBGPConf=1 || true
+	[[ "${autoBGP}" -eq 1 ]] && [[ "${cASN}" -ne 0 ]] && cBGPConf=1
 }
 
 makeConf()
@@ -107,7 +107,7 @@ makeConf()
 	sEndpoint="${sHost}:${sPort}"
 
 	# create client configs dir
-	mkdir -p "${cConfs}" || true
+	mkdir -p "${cConfs}"
 	cPath="${cConfs}/${cName}"
 
 	# create the client config to be shared
@@ -199,8 +199,12 @@ addClient()
 	# making sure frr is running
 	if [[ "${autoBGP}" -eq 1 ]]; then
 		if [[ -n "${cASN}" ]]; then
-			if systemctl status frr.service > /dev/null 2>&1; then
-				configFRR=1
+			if [[ "${dynamicBGP}" -ne 1 ]]; then
+				if grep -q grep bgpd <<< "$(systemctl status frr.service)"; then
+					configFRR=1
+				else
+					echo "FRRouting BGP is not running. Terminating"
+				fi
 			fi
 		fi
 	fi
@@ -240,7 +244,9 @@ addClient()
 	makeConf
 
 	# if enabled, configure frrouting bgp daemon on the server
-	[[ "${configFRR}" -eq 1 ]] && addBGP
+	if [[ "${configFRR}" -eq 1 ]]; then
+		addBGP
+	fi
 }
 
 removeClient()
@@ -258,7 +264,13 @@ removeClient()
 	wg-quick save "${sIface}"
 
 	# if ASN exists in the DB, remove neighbor from server BGP daemon
-	[[ "${autoBGP}" -eq 1 ]] && [[ "${cASN}" -ne 0 ]] && removeBGP || true
+	if [[ "${autoBGP}" -eq 1 ]]; then
+		if [[ "${dynamicBGP}" -ne 1 ]]; then
+			if [[ "${cASN}" -ne 0 ]]; then 
+				removeBGP
+			fi
+		fi
+	fi
 	
 	# delete config files from configs directory
 	find "${cConfs}" -name "${cName}.*" -delete
@@ -271,7 +283,7 @@ reloadConf()
 		wg set wg0 peer "${i}" remove
 	done
 
-	# read the DB file and add each peer to wireguard configuration
+	# read the DB file and add each peer to wireguard and FRR configuration
 	while read -r line; do
 		cPub=$(awk '{print $3}' <<< "${line}")
 		cIP=$(awk '{print $5}' <<< "${line}")
@@ -280,7 +292,15 @@ reloadConf()
 		wg set "${sIface}" peer "${cPub}" allowed-ips "${cIP}" \
 			preshared-key "${cPsk}"
 		cASN=$(awk '{print $6}' <<< "${line}")
-		[[ "${autoBGP}" -eq 1 ]] && [[ "${cASN}" -ne 0 ]] && addBGP || true
+
+		if [[ "${autoBGP}" -eq 1 ]]; then
+			if [[ "${dynamicBGP}" -ne 1 ]]; then
+				if [[ "${cASN}" -ne 0 ]]; then
+					addBGP
+				fi
+			fi
+		fi
+
 	done < "${sDB}"
 
 	# save currently running wireguard configuration
