@@ -60,7 +60,6 @@ IFS=$'\n' read -r -d '' genQR autoBGP sIface sHost cRoutes cDNS cConfs sConf sDB
 set -e
 
 # make sure binaries are available
-
 [[ -x "$(hash wg wg-quick)" ]] && echo 'Wireguard tools are not installed. Terminating.' && \
 	exit 1
 [[ "${genQR}" -eq 1 ]] && [[ -x "$(hash qrencode)" ]] && \
