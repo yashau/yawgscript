@@ -85,7 +85,7 @@ checkBGP()
 						exit 1
 					else
 						# do some basic client AS number validation
-						if grep -q '^\d{5}$' <<< "${cASN}"; then
+						if grep -Pq '^\d{5}$' <<< "${cASN}"; then
 							cBGPConf=1
 						else
 							echo "Client AS number is invalid. Terminating."
