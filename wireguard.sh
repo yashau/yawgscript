@@ -86,7 +86,7 @@ checkBGP()
 					else
 						# do some basic client AS number validation
 						if grep -q '^\d{5}$' <<< "${cASN}"; then
-							return 0
+							cBGPConf=1
 						else
 							echo "Client AS number is invalid. Terminating."
 							exit 1
@@ -157,7 +157,7 @@ makeConf()
 	echo "A copy of the config has been saved at ${cPath}.conf"
 
 	# generate single vtysh command to configure frrouting on client-side
-	if checkBGP; then
+	if [[ "${cBGPConf}" -eq 1 ]]; then
 		{
 			echo "vtysh -c \"configure terminal\" \\"
 			echo "-c \"ip prefix-list no-default-route seq 5 permit 0.0.0.0/0 ge 1\" \\"
