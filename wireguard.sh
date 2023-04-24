@@ -77,7 +77,7 @@ checkBGP()
 			exit 1
 		else
 			if [[ "${dynamicBGP}" -ne 1 ]]; then
-				if grep -q grep bgpd <<< "$(systemctl status frr.service)"; then
+				if grep -q bgpd <<< "$(systemctl status frr.service)"; then
 					sASN=$(grep -Po '(?<=AS)\d{5}' <<< "$(vtysh -c 'show bgp view')")
 					if [[ -z "${sASN}" ]]; then
 						echo "FRRouting BGP is not configured. Minimum of router local \
