@@ -96,6 +96,8 @@ checkBGP()
 					echo "FRRouting BGP is not running. Terminating"
 					exit 1
 				fi
+			else
+				false
 			fi
 		fi
 	fi
