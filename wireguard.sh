@@ -60,10 +60,10 @@ IFS=$'\n' read -r -d '' genQR autoBGP dynamicBGP sIface sHost cRoutes cDNS cConf
 set -e
 
 # make sure binaries are available
-[[ -x "$(hash wg wg-quick)" ]] && echo 'Wireguard tools are not installed. Terminating.' \
-	&& exit 1
+[[ -x "$(hash wg wg-quick)" ]] && echo "Wireguard tools are not installed. \
+	Terminating." && exit 1
 [[ "${genQR}" -eq 1 ]] && [[ -x "$(hash qrencode)" ]] && \
-	echo 'qrencode is not installed. Terminating.' && exit 1
+	echo "qrencode is not installed. Terminating." && exit 1
 
 sConf=$(eval echo "$sConf")
 sDB=$(eval echo "$sDB")
@@ -140,7 +140,8 @@ makeConf()
 	{
 		echo "[Interface]"
 		echo "PrivateKey = ${cPriv}"
-		echo "Address = ${cIP%%,*}$([[ "${cBGPConf}" -eq 1 ]] && echo -n "/${sAddress#*/}")"
+		echo "Address = ${cIP%%,*}$([[ "${cBGPConf}" -eq 1 ]] \
+			&& echo -n "/${sAddress#*/}")"
 		echo "DNS = ${cDNS}"
 		[[ "${cBGPConf}" -eq 1 ]] && echo "Table = off"
 		echo "[Peer]"
