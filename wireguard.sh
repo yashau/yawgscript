@@ -54,26 +54,52 @@ read -r cmd cName cIP cASN <<< "${1} ${2} ${3} ${4}"
 
 # read variables from env file
 mapfile -t env <<< "$(grep -v '^\s*$\|^\s*\#' .env)"
-IFS=$'\n' read -r -d '' genQR autoBGP dynamicBGP sIface sHost cRoutes cDNS cConfs sConf sDB \
-	<<< "$(printf '%s\n' "${env[@]#*=}")"
+IFS=$'\n' read -r -d '' genQR autoBGP dynamicBGP sIface sHost cRoutes cDNS cConfs \
+	sConf sDB <<< "$(printf '%s\n' "${env[@]#*=}")"
 
 set -e
 
 # make sure binaries are available
-[[ -x "$(hash wg wg-quick)" ]] && echo 'Wireguard tools are not installed. Terminating.' && \
-	exit 1
+[[ -x "$(hash wg wg-quick)" ]] && echo 'Wireguard tools are not installed. Terminating.' \
+	&& exit 1
 [[ "${genQR}" -eq 1 ]] && [[ -x "$(hash qrencode)" ]] && \
 	echo 'qrencode is not installed. Terminating.' && exit 1
 
-# check if vtysh is available and then get the server ASN
-if [[ "${autoBGP}" -eq 1 ]]; then
-	[[ -x "$(hash vtysh)" ]] && echo 'FRRouting is not installed. Terminating.' && exit 1
-	sASN=$(grep -Po '(?<=AS)\d{5}' <<< "$(vtysh -c 'show bgp view')")
-	cASN=${cASN#*bgp=}
-fi
-
 sConf=$(eval echo "$sConf")
 sDB=$(eval echo "$sDB")
+
+checkBGP()
+{
+	# check if frrouting and bgpd is available
+	if [[ "${autoBGP}" -eq 1 ]]; then
+		if [[ ! -x "$(hash vtysh)" ]]; then
+			echo 'FRRouting is not installed. Terminating.'
+			exit 1
+		else
+			if [[ "${dynamicBGP}" -ne 1 ]]; then
+				if grep -q grep bgpd <<< "$(systemctl status frr.service)"; then
+					sASN=$(grep -Po '(?<=AS)\d{5}' <<< "$(vtysh -c 'show bgp view')")
+					if [[ -z "${sASN}" ]]; then
+						echo "FRRouting BGP is not configured. Minimum of router local \
+							as number and bgp router-id must be set. Terminating"
+						exit 1
+					else
+						# do some basic client AS number validation
+						if grep -q '^\d{5}$' <<< "${cASN}"; then
+							true
+						else
+							echo "Client AS number is invalid. Terminating."
+							exit 1
+						fi
+					fi
+				else
+					echo "FRRouting BGP is not running. Terminating"
+					exit 1
+				fi
+			fi
+		fi
+	fi
+}
 
 getVars()
 {
@@ -83,7 +109,7 @@ getVars()
 	fi
 
 	# get client params from the DB
-	line=$(grep -P "${cName}\t" "${sDB}")
+	line=$(grep -P "${cName}\t" "${sDB}" || true)
 	if [[ -z "${line}" ]]; then
 		# exit if client name doesn't exist in the DB
 		echo "Client not found in DB. Terminating."
@@ -94,11 +120,7 @@ getVars()
 	cPsk="$(mktemp /tmp/psk-XXXXX)" && trap 'rm "${cPsk}"' EXIT
 	echo "${_cPsk}" > "${cPsk}"
 
-	if [[ "${autoBGP}" -eq 1 ]]; then
-		if [[ "${cASN}" -ne 0 ]]; then
-			cBGPConf=1
-		fi
-	fi
+	checkBGP && cBGPConf=1
 }
 
 makeConf()
@@ -166,26 +188,30 @@ makeConf()
 addBGP()
 {
 	# add the client bgp neighbor on the server
-	if ! grep -q "${cASN}" <<< "$(vtysh -c 'show ip bgp summary')"; then
-		vtysh -c "configure terminal" \
-			-c "ip prefix-list no-default-route seq 5 permit 0.0.0.0/0 ge 1" \
-			-c "router bgp ${sASN}" \
-			-c "neighbor ${cIP%%,*} remote-as ${cASN}" \
-			-c "address-family ipv4 unicast" \
-			-c "neighbor ${cIP%%,*} prefix-list no-default-route in" \
-			-c "neighbor ${cIP%%,*} prefix-list no-default-route out" \
-			-c "do write memory"
+	if checkBGP; then
+		if ! grep -q "${cASN}" <<< "$(vtysh -c 'show ip bgp summary')"; then
+			vtysh -c "configure terminal" \
+				-c "ip prefix-list no-default-route seq 5 permit 0.0.0.0/0 ge 1" \
+				-c "router bgp ${sASN}" \
+				-c "neighbor ${cIP%%,*} remote-as ${cASN}" \
+				-c "address-family ipv4 unicast" \
+				-c "neighbor ${cIP%%,*} prefix-list no-default-route in" \
+				-c "neighbor ${cIP%%,*} prefix-list no-default-route out" \
+				-c "do write memory"
+		fi
 	fi
 }
 
 removeBGP()
 {
 	# remove the client bgp neighbor on the server
-	if grep -q "${cASN}" <<< "$(vtysh -c 'show ip bgp summary')"; then
-		vtysh -c "configure terminal" \
-			-c "router bgp ${sASN}" \
-			-c "no neighbor ${cIP%%,*} remote-as ${cASN}" \
-			-c "do write memory"
+	if checkBGP; then
+		if grep -q "${cASN}" <<< "$(vtysh -c 'show ip bgp summary')"; then
+			vtysh -c "configure terminal" \
+				-c "router bgp ${sASN}" \
+				-c "no neighbor ${cIP%%,*} remote-as ${cASN}" \
+				-c "do write memory"
+		fi
 	fi
 }
 
@@ -198,19 +224,6 @@ addClient()
 	if [[ -z "${cIP}" ]]; then
 		echo "Client IP must be specified. Terminating."
     	exit 1
-	fi
-
-	# making sure frr is running
-	if [[ "${autoBGP}" -eq 1 ]]; then
-		if [[ -n "${cASN}" ]]; then
-			if [[ "${dynamicBGP}" -ne 1 ]]; then
-				if grep -q grep bgpd <<< "$(systemctl status frr.service)"; then
-					configFRR=1
-				else
-					echo "FRRouting BGP is not running. Terminating"
-				fi
-			fi
-		fi
 	fi
 
 	# make sure client does not already exist in DB
@@ -246,11 +259,9 @@ addClient()
 
 	# generate the client configuration files and commands
 	makeConf
-
-	# if enabled, configure frrouting bgp daemon on the server
-	if [[ "${configFRR}" -eq 1 ]]; then
-		addBGP
-	fi
+	
+	cASN=${cASN#*bgp=}
+	addBGP
 }
 
 removeClient()
@@ -268,13 +279,7 @@ removeClient()
 	wg-quick save "${sIface}"
 
 	# if ASN exists in the DB, remove neighbor from server BGP daemon
-	if [[ "${autoBGP}" -eq 1 ]]; then
-		if [[ "${dynamicBGP}" -ne 1 ]]; then
-			if [[ "${cASN}" -ne 0 ]]; then 
-				removeBGP
-			fi
-		fi
-	fi
+	checkBGP && removeBGP
 	
 	# delete config files from configs directory
 	find "${cConfs}" -name "${cName}.*" -delete
@@ -296,15 +301,7 @@ reloadConf()
 		wg set "${sIface}" peer "${cPub}" allowed-ips "${cIP}" \
 			preshared-key "${cPsk}"
 		cASN=$(awk '{print $6}' <<< "${line}")
-
-		if [[ "${autoBGP}" -eq 1 ]]; then
-			if [[ "${dynamicBGP}" -ne 1 ]]; then
-				if [[ "${cASN}" -ne 0 ]]; then
-					addBGP
-				fi
-			fi
-		fi
-
+		checkBGP && addBGP
 	done < "${sDB}"
 
 	# save currently running wireguard configuration
