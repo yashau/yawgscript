@@ -121,8 +121,6 @@ getVars()
 	read -r cName cPriv cPub _cPsk cIP cASN <<< "${line}"
 	cPsk="$(mktemp /tmp/psk-XXXXX)" && trap 'rm "${cPsk}"' EXIT
 	echo "${_cPsk}" > "${cPsk}"
-
-	checkBGP && cBGPConf=1
 }
 
 makeConf()
@@ -159,7 +157,7 @@ makeConf()
 	echo "A copy of the config has been saved at ${cPath}.conf"
 
 	# generate single vtysh command to configure frrouting on client-side
-	if [[ "${cBGPConf}" -eq 1 ]]; then
+	if checkBGP; then
 		{
 			echo "vtysh -c \"configure terminal\" \\"
 			echo "-c \"ip prefix-list no-default-route seq 5 permit 0.0.0.0/0 ge 1\" \\"
