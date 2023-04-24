@@ -196,7 +196,7 @@ addClient()
     	exit 1
 	fi
 
-	# making sure frr is running and that the supplied client ASN does not exist
+	# making sure frr is running
 	if [[ "${autoBGP}" -eq 1 ]]; then
 		if [[ -n "${cASN}" ]]; then
 			if systemctl status frr.service > /dev/null 2>&1; then
