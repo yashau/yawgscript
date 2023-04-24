@@ -163,7 +163,7 @@ makeConf()
 addBGP()
 {
 	# add the client bgp neighbor on the server
-	if grep -q "${cASN}" <<< "$(vtysh -c 'show ip bgp summary')"; then
+	if ! grep -q "${cASN}" <<< "$(vtysh -c 'show ip bgp summary')"; then
 		vtysh -c "configure terminal" \
 			-c "ip prefix-list no-default-route seq 5 permit 0.0.0.0/0 ge 1" \
 			-c "router bgp ${sASN}" \
