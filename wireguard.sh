@@ -72,8 +72,7 @@ checkBGP()
 {
 	# check if frrouting and bgpd is available
 	if [[ "${autoBGP}" -eq 1 ]]; then
-		if ! [ -x "$(hash vtysh)" ]; then
-			echo "$?"
+		if [[ -x "$(hash vtysh)" ]]; then
 			echo 'FRRouting is not installed. Terminating.'
 			exit 1
 		else
