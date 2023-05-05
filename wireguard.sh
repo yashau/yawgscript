@@ -85,9 +85,7 @@ checkBGP()
 						exit 1
 					else
 						# do some basic client AS number validation
-						if grep -Pq '^\d{5}$' <<< "${cASN}"; then
-							cBGPConf=1
-						else
+						if ! grep -Pq '^\d{5}$' <<< "${cASN}"; then
 							echo "Client AS number is invalid. Terminating."
 							exit 1
 						fi
@@ -135,7 +133,11 @@ makeConf()
 	# create client configs dir
 	mkdir -p "${cConfs}"
 	cPath="${cConfs}/${cName}"
-
+	
+	if grep -Pq '^\d{5}$' <<< "${cASN}"; then
+		cBGPConf=1
+	fi
+	
 	# create the client config to be shared
 	{
 		echo "[Interface]"
@@ -282,7 +284,7 @@ removeClient()
 	wg-quick save "${sIface}"
 
 	# if ASN exists in the DB, remove neighbor from server BGP daemon
-	checkBGP && removeBGP
+	removeBGP
 	
 	# delete config files from configs directory
 	find "${cConfs}" -name "${cName}.*" -delete
