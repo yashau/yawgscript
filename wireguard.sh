@@ -135,6 +135,7 @@ makeConf()
 	cPath="${cConfs}/${cName}"
 	
 	if grep -Pq '^\d{5}$' <<< "${cASN}"; then
+		sASN=$(grep -Po '(?<=AS)\d{5}' <<< "$(vtysh -c 'show bgp view')")
 		cBGPConf=1
 	fi
 	
