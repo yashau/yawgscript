@@ -176,7 +176,7 @@ makeConf()
 			echo "-c \"neighbor ${sAddress%/*} remote-as ${sASN}\" \\"
 			echo "-c \"address-family ipv4 unicast\" \\"
 			for subnet in "${networks[@]}"; do
-				if [[ $i == *"/"* ]]; then
+				if [[ $subnet == *"/"* ]]; then
 						echo "-c \"network ${subnet}\" \\"
 				else
 						echo "-c \"network ${subnet}/32\" \\"
