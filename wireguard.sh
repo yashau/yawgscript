@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-############################ WireGuard Script by Yashau v2.2 ############################
+############################ WireGuard Script by Yashau v2.4 ############################
 
 ######################################### README ########################################
 ##--This script assumes that the WireGuard server configuration lives in---------------##
@@ -54,7 +54,7 @@ read -r cmd cName cIP cASN <<< "${1} ${2} ${3} ${4}"
 
 # read variables from env file
 mapfile -t env <<< "$(grep -v '^\s*$\|^\s*\#' .env)"
-IFS=$'\n' read -r -d '' genQR autoBGP dynamicBGP sIface sHost cRoutes cDNS cConfs \
+IFS=$'\n' read -r -d '' genQR autoBGP dynamicBGP sExternalASN sIface sHost cRoutes cDNS cConfs \
 	sConf sDB <<< "$(printf '%s\n' "${env[@]#*=}")"
 
 set -e
@@ -135,7 +135,11 @@ makeConf()
 	cPath="${cConfs}/${cName}"
 	
 	if grep -Pq '^\d{5}$' <<< "${cASN}"; then
-		sASN=$(grep -Po '(?<=AS)\d{5}' <<< "$(vtysh -c 'show bgp view')")
+		if [[ "${sExternalASN}" -eq 1 ]]; then
+			sASN=external
+		else
+			sASN=$(grep -Po '(?<=AS)\d{5}' <<< "$(vtysh -c 'show bgp view')")
+		fi
 		cBGPConf=1
 	fi
 	
@@ -145,7 +149,7 @@ makeConf()
 		echo "PrivateKey = ${cPriv}"
 		echo "Address = ${cIP%%,*}$([[ "${cBGPConf}" -eq 1 ]] \
 			&& echo -n "/${sAddress#*/}")"
-		echo "DNS = ${cDNS}"
+		[[ "${cBGPConf}" -ne 1 ]] && echo "DNS = ${cDNS}"
 		[[ "${cBGPConf}" -eq 1 ]] && echo "Table = off"
 		echo "[Peer]"
 		echo "PublicKey = ${sPub}"
@@ -161,6 +165,8 @@ makeConf()
 	echo "A copy of the config has been saved at ${cPath}.conf"
 
 	# generate single vtysh command to configure frrouting on client-side
+	mapfile -td, networks <<<"${cIP},"
+	unset 'a[-1]'
 	if [[ "${cBGPConf}" -eq 1 ]]; then
 		{
 			echo "vtysh -c \"configure terminal\" \\"
@@ -169,7 +175,13 @@ makeConf()
 			echo "-c \"bgp router-id ${cIP%%,*}\" \\"
 			echo "-c \"neighbor ${sAddress%/*} remote-as ${sASN}\" \\"
 			echo "-c \"address-family ipv4 unicast\" \\"
-			echo "-c \"redistribute connected\" \\"
+			for subnet in "${networks[@]}"; do
+				if [[ $i == *"/"* ]]; then
+						echo "-c \"network ${subnet}\" \\"
+				else
+						echo "-c \"network ${subnet}/32\" \\"
+				fi
+			done
 			echo "-c \"neighbor ${sAddress%/*} prefix-list no-default-route in\" \\"
 			echo "-c \"neighbor ${sAddress%/*} prefix-list no-default-route out\" \\"
 			echo "-c \"do write memory\""
