@@ -167,6 +167,7 @@ makeConf()
 	# generate single vtysh command to configure frrouting on client-side
 	mapfile -td, networks <<<"${cIP},"
 	unset 'a[-1]'
+	declare -p networks
 	if [[ "${cBGPConf}" -eq 1 ]]; then
 		{
 			echo "vtysh -c \"configure terminal\" \\"
