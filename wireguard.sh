@@ -100,7 +100,8 @@ checkBGP()
 				return 1
 			fi
 		fi
-  		return 1
+	else
+	  	return 1
 	fi
 }
 
