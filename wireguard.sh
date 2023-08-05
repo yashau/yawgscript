@@ -49,6 +49,8 @@
 
 [[ $EUID -ne 0 ]] && echo "This script must be run as root. Terminating." && exit 1
 
+cd "$(dirname "$0")"
+
 # read variables from arguments
 read -r cmd cName cIP cASN <<< "${1} ${2} ${3} ${4}"
 
