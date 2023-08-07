@@ -57,7 +57,7 @@ read -r cmd cName cIP cASN <<< "${1} ${2} ${3} ${4}"
 # read variables from env file
 mapfile -t env <<< "$(grep -v '^\s*$\|^\s*\#' .env)"
 IFS=$'\n' read -r -d '' genQR autoBGP dynamicBGP sExternalASN sIface sHost cRoutes cDNS cConfs \
-	sConf sDB <<< "$(printf '%s\n' "${env[@]#*=}")"
+	sConf sDB PreUp PreDown PostUp PostDown <<< "$(printf '%s\n' "${env[@]#*=}")"
 
 set -e
 
@@ -155,6 +155,10 @@ makeConf()
 			&& echo -n "/${sAddress#*/}")"
 		[[ "${cBGPConf}" -ne 1 ]] && echo "DNS = ${cDNS}"
 		[[ "${cBGPConf}" -eq 1 ]] && echo "Table = off"
+		[[ "${PreUp}" != none ]] && echo "PreUp = \"${PreUp}\""
+		[[ "${PreDown}" != none ]] && echo "PreDown = \"${PreDown}\""
+		[[ "${PostUp}" != none ]] && echo "PostUp = \"${PostUp}\""
+		[[ "${PostDown}" != none ]] && echo "PostDown = \"${PostDown}\""
 		echo "[Peer]"
 		echo "PublicKey = ${sPub}"
 		echo "PresharedKey = $(<"${cPsk}")"
