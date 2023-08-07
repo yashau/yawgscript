@@ -56,8 +56,8 @@ read -r cmd cName cIP cASN <<< "${1} ${2} ${3} ${4}"
 
 # read variables from env file
 mapfile -t env <<< "$(grep -v '^\s*$\|^\s*\#' .env)"
-IFS=$'\n' read -r -d '' genQR autoBGP dynamicBGP sExternalASN sIface sHost cRoutes cDNS cConfs \
-	sConf sDB PreUp PreDown PostUp PostDown <<< "$(printf '%s\n' "${env[@]#*=}")"
+IFS=$'\n' read -r -d '' genQR autoBGP dynamicBGP sExternalASN sIface sHost cRoutes cTable cDNS \
+	cConfs sConf sDB PreUp PreDown PostUp PostDown <<< "$(printf '%s\n' "${env[@]#*=}")"
 
 set -e
 
@@ -154,7 +154,7 @@ makeConf()
 		echo "Address = ${cIP%%,*}$([[ "${cBGPConf}" -eq 1 ]] \
 			&& echo -n "/${sAddress#*/}")"
 		[[ "${cBGPConf}" -ne 1 ]] && echo "DNS = ${cDNS}"
-		[[ "${cBGPConf}" -eq 1 ]] && echo "Table = off"
+		[[ "${cBGPConf}" -eq 1 || "${cTable}" -eq 0 ]] && echo "Table = off"
 		[[ "${PreUp}" != none ]] && echo "PreUp = ${PreUp}"
 		[[ "${PreDown}" != none ]] && echo "PreDown = ${PreDown}"
 		[[ "${PostUp}" != none ]] && echo "PostUp = ${PostUp}"
